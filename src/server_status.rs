@@ -1,4 +1,4 @@
-use serde::{Deserialize, Serialize};
+use serde_derive::{Deserialize, Serialize};
 use serde_json::Value;
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -6,7 +6,7 @@ use serde_json::Value;
 pub struct ServerStatus {
     pub version: Version,
     pub players: Players,
-    pub description: ChatComponent,
+    pub description: Description,
     pub favicon: String,
     pub modinfo: Option<Modinfo>,
 }
@@ -33,27 +33,18 @@ pub struct Sample {
     pub id: String,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(untagged)]
-pub enum ChatComponent {
-    Text(String),
-    Object(ChatObject),
-    Array(Vec<ChatComponent>),
-}
-
-impl Default for ChatComponent {
-    fn default() -> Self {
-        ChatComponent::Text(String::new())
-    }
+#[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Description {
+    pub text: String,
+    pub extra: Option<Vec<Extra>>,
 }
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct ChatObject {
-    #[serde(default)]
+pub struct Extra {
+    pub extra: Option<Vec<Extra>>,
     pub text: String,
-    #[serde(default)]
-    pub extra: Vec<ChatComponent>,
 }
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]

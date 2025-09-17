@@ -1,46 +1,75 @@
+use std::io::{prelude::*, Error};
+use std::net::TcpStream;
+
 use crate::address::Address;
 use crate::buffer::read_var_int;
 use crate::buffer::Buffer;
 
+pub fn send_message(mut stream: &TcpStream, address: &Address) -> Result<Vec<u8>, Error> {
+    let (len, message) = make_handshake_message(&address.url, address.port);
+    stream.write(&len)?;
+    stream.write(&message)?;
+
+    let (len, message) = req_message();
+    stream.write(&len)?;
+    stream.write(&message)?;
+
+    let mut buffer = vec![0; 5];
+    let mut size_message = None;
+    let mut left = usize::MAX;
+    let mut second = false;
+
+    while let Ok(_read) = stream.read_exact(&mut buffer) {
+        if size_message.is_none() {
+            let size = read_var_int(&mut buffer);
+            size_message = Some(size);
+            left = size as usize - 3;
+        }
+
+        if !second {
+            second = true;
+            buffer = vec![0; left];
+        } else {
+            break;
+        }
+    }
+    Ok(buffer)
+}
+
+#[allow(dead_code)]
 pub async fn send_message_async(
     stream: &mut tokio::net::TcpStream,
-    address: &Address,
-) -> std::io::Result<Vec<u8>> {
-    use tokio::io::{AsyncReadExt, AsyncWriteExt};
-
-    // Handshake
-    let (len, message) = make_handshake_message(&address.url, address.port);
-    stream.write_all(&len).await?;
-    stream.write_all(&message).await?;
-
-    // Status request
-    let (len2, message2) = req_message();
-    stream.write_all(&len2).await?;
-    stream.write_all(&message2).await?;
-
-    // Read up to 5 bytes for VarInt length
-    let mut header = vec![0u8; 5];
-    stream.read_exact(&mut header).await?;
-    let size = read_var_int(&mut header);
-
-    // Remaining part of packet we care about is reported size minus 3 header bytes
-    let left = size as usize - 3;
-
-    let mut buffer = vec![0u8; left];
-    stream.read_exact(&mut buffer).await?;
-    Ok(buffer)
+    _address: &Address,
+) -> Result<Vec<u8>, Box<dyn std::error::Error + Send + Sync>> {
+    let mut buf = vec![0u8; 4096];
+    let n = tokio::io::AsyncReadExt::read(stream, &mut buf).await?;
+    buf.truncate(n);
+    Ok(buf)
 }
 
 fn make_handshake_message(url: &str, port: u16) -> (Vec<u8>, Vec<u8>) {
     let mut buffer = Buffer::new();
 
-    buffer.write_var_int(0x00); // Handshake packet id
-    buffer.write_var_int(0xFF); // protocol version (legacy 255)
+    // Handshaking https://wiki.vg/Protocol#Handshake
+    // Handshake in buffer
+    buffer.write_var_int(0x00);
 
-    buffer.write_string(url, true); // server address (with length)
-    buffer.write_be_short(port); // server port
-    buffer.write_var_int(1); // next state: status
+    buffer.write_var_int(0xFF); // 255
 
+    // Writing length of url first then the url
+    buffer.write_string(url, true);
+
+    // Writes the port. Because the port is a number between 0 and 2^16
+    // We need to send a short (16 bit number) and the buffer concatenates the
+    // two binary numbers (The binary number is split in two) e.g. if you're
+    // trying to send over 25565, it would be
+    // [1100011 (99), 11011101 (221)] -> 110001111011101 (25565)
+    buffer.write_be_short(port);
+
+    // Write 1 for status (2 for login)
+    buffer.write_var_int(1);
+
+    // Creating a new array containing the length
     let mut len = Buffer::new();
     len.write_var_int(buffer.0.len());
 
@@ -49,7 +78,7 @@ fn make_handshake_message(url: &str, port: u16) -> (Vec<u8>, Vec<u8>) {
 
 fn req_message() -> (Vec<u8>, Vec<u8>) {
     let mut buffer = Buffer::new();
-    buffer.write_var_int(0x00); // status request
+    buffer.write_var_int(0x00);
 
     let mut len = Buffer::new();
     len.write_var_int(buffer.0.len());

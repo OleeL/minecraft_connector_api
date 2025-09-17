@@ -1,12 +1,9 @@
-use actix_web::{get, middleware::Logger, web, App, HttpResponse, HttpServer, ResponseError};
-use env_logger::Env;
-use log::error;
+use actix_web::{get, web, App, HttpResponse, HttpServer, ResponseError};
 use serde::Deserialize;
 use serde_json::json;
-use thiserror::Error;
-
-use tokio::net::TcpStream;
-use tokio::time::{timeout, Duration};
+use std::error::Error as StdError;
+use std::fmt;
+use std::net::TcpStream;
 
 mod address;
 mod buffer;
@@ -14,36 +11,20 @@ mod messages;
 mod server_status;
 
 use address::Address;
-use messages::send_message_async;
-use server_status::ServerStatus;
+use messages::send_message;
 
-use actix_web::http::StatusCode as HttpStatus;
+#[derive(Debug)]
+struct ServiceError(Box<dyn StdError + Send + Sync>);
 
-#[derive(Debug, Error)]
-enum ApiError {
-    #[error("bad request: {0}")]
-    BadRequest(String),
-    #[error("connection to {0} timed out")]
-    Timeout(String),
-    #[error("I/O error: {0}")]
-    Io(#[from] std::io::Error),
-    #[error("invalid server response: {0}")]
-    Parse(#[from] serde_json::Error),
-}
-
-impl ResponseError for ApiError {
-    fn status_code(&self) -> HttpStatus {
-        match self {
-            ApiError::BadRequest(_) => HttpStatus::BAD_REQUEST,
-            ApiError::Timeout(_) => HttpStatus::GATEWAY_TIMEOUT,
-            ApiError::Io(_) | ApiError::Parse(_) => HttpStatus::BAD_GATEWAY,
-        }
+impl fmt::Display for ServiceError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{:?}", self.0)
     }
-
+}
+impl StdError for ServiceError {}
+impl ResponseError for ServiceError {
     fn error_response(&self) -> HttpResponse {
-        let code = self.status_code(); // avoid naming this `status`
-        error!("{} - {}", code, self);
-        HttpResponse::build(code).json(json!({ "error": self.to_string() }))
+        HttpResponse::InternalServerError().json(json!({ "error": self.to_string() }))
     }
 }
 
@@ -59,48 +40,37 @@ fn default_port() -> u16 {
 }
 
 #[get("/status")]
-async fn status(query: web::Query<StatusQuery>) -> Result<web::Json<ServerStatus>, ApiError> {
-    if query.url.trim().is_empty() {
-        return Err(ApiError::BadRequest("url cannot be empty".into()));
-    }
+async fn status(query: web::Query<StatusQuery>) -> Result<HttpResponse, ServiceError> {
+    // Heavy / blocking work should not happen on the Actix worker thread.
+    // Off-load to a blocking task.
+    let res = web::block(move || {
+        let address = Address {
+            url: query.url.clone(),
+            port: query.port,
+        };
+        query_server(&address)
+    })
+    .await
+    .map_err(|e| ServiceError(Box::new(e)))?;
 
-    let address = Address {
-        url: query.url.clone(),
-        port: query.port,
-    };
+    let result = res.map_err(ServiceError)?;
 
-    let result = query_server_async(&address).await?;
-    let status: ServerStatus = serde_json::from_str(&result)?;
-    Ok(web::Json(status))
+    Ok(HttpResponse::Ok().body(result))
 }
 
-async fn query_server_async(address: &Address) -> Result<String, ApiError> {
+fn query_server(address: &Address) -> Result<String, Box<dyn StdError + Send + Sync>> {
     let adr_str = format!("{}:{}", address.url, address.port);
-    let mut stream: TcpStream = timeout(Duration::from_secs(5), TcpStream::connect(&adr_str))
-        .await
-        .map_err(|_| ApiError::Timeout(adr_str.clone()))??;
+    let stream = TcpStream::connect(&adr_str)?;
 
-    let buff = send_message_async(&mut stream, address).await?;
-
+    let buff = send_message(&stream, address)?;
     Ok(String::from_utf8_lossy(&buff[..]).to_string())
 }
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
-    // Default to info logs if RUST_LOG is not set (and include actix_web)
-    let env = Env::default().default_filter_or("info,actix_web=info");
-    env_logger::Builder::from_env(env)
-        .format_timestamp_secs()
-        .init();
-
     println!("Listening on http://0.0.0.0:8080");
-    HttpServer::new(|| {
-        App::new().wrap(Logger::default()).service(status).route(
-            "/healthz",
-            web::get().to(|| async { HttpResponse::Ok().body("ok") }),
-        )
-    })
-    .bind(("0.0.0.0", 8080))?
-    .run()
-    .await
+    HttpServer::new(|| App::new().service(status))
+        .bind(("0.0.0.0", 8080))?
+        .run()
+        .await
 }
