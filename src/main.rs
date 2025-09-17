@@ -13,7 +13,6 @@ mod server_status;
 use address::Address;
 use messages::send_message;
 
-/// Wrapper so we can convert any internal error into an HTTP response.
 #[derive(Debug)]
 struct ServiceError(Box<dyn StdError + Send + Sync>);
 
@@ -44,7 +43,7 @@ fn default_port() -> u16 {
 async fn status(query: web::Query<StatusQuery>) -> Result<HttpResponse, ServiceError> {
     // Heavy / blocking work should not happen on the Actix worker thread.
     // Off-load to a blocking task.
-    let result = web::block(move || {
+    let res = web::block(move || {
         let address = Address {
             url: query.url.clone(),
             port: query.port,
@@ -52,8 +51,9 @@ async fn status(query: web::Query<StatusQuery>) -> Result<HttpResponse, ServiceE
         query_server(&address)
     })
     .await
-    .map_err(|e| ServiceError(e.into()))?
-    .unwrap();
+    .map_err(|e| ServiceError(Box::new(e)))?;
+
+    let result = res.map_err(ServiceError)?;
 
     Ok(HttpResponse::Ok().body(result))
 }

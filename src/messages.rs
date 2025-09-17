@@ -36,6 +36,17 @@ pub fn send_message(mut stream: &TcpStream, address: &Address) -> Result<Vec<u8>
     Ok(buffer)
 }
 
+#[allow(dead_code)]
+pub async fn send_message_async(
+    stream: &mut tokio::net::TcpStream,
+    _address: &Address,
+) -> Result<Vec<u8>, Box<dyn std::error::Error + Send + Sync>> {
+    let mut buf = vec![0u8; 4096];
+    let n = tokio::io::AsyncReadExt::read(stream, &mut buf).await?;
+    buf.truncate(n);
+    Ok(buf)
+}
+
 fn make_handshake_message(url: &str, port: u16) -> (Vec<u8>, Vec<u8>) {
     let mut buffer = Buffer::new();
 
