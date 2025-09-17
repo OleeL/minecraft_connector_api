@@ -55,7 +55,7 @@ async fn status(query: web::Query<StatusQuery>) -> Result<HttpResponse, ServiceE
     .map_err(|e| ServiceError(e.into()))?
     .unwrap();
 
-    Ok(HttpResponse::Ok().json(json!({ "status": result })))
+    Ok(HttpResponse::Ok().json(result))
 }
 
 fn query_server(address: &Address) -> Result<String, Box<dyn StdError + Send + Sync>> {
