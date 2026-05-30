@@ -17,6 +17,7 @@ jobs:
   prepare-release:
     name: Prepare release tag
     runs-on: ubuntu-latest
+    timeout-minutes: 10
 
     outputs:
       tag_name: ${{ steps.version.outputs.tag_name }}
@@ -89,6 +90,7 @@ jobs:
     needs: prepare-release
     if: needs.prepare-release.outputs.prerelease == 'false'
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
 
     strategy:
       fail-fast: false
@@ -110,7 +112,7 @@ jobs:
             archive_ext: tar.gz
 
           - asset_name: minecraft_connector_api-macos-x86_64
-            os: macos-13
+            os: macos-latest
             target: x86_64-apple-darwin
             archive_ext: tar.gz
 
@@ -178,6 +180,7 @@ jobs:
       - build-release-assets
     if: needs.prepare-release.outputs.prerelease == 'false'
     runs-on: ubuntu-latest
+    timeout-minutes: 10
 
     steps:
       - name: Download release asset artifacts
