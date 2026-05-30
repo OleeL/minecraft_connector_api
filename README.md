@@ -97,6 +97,32 @@ The response is the Minecraft server's status JSON payload as a raw string. A ty
 }
 ```
 
+## Releases
+
+GitHub Actions release automation is configured in `.github/workflows/release.yml`.
+
+A release is created automatically when you push a version tag that starts with `v`, for example:
+
+```sh
+git tag v0.1.0
+git push origin v0.1.0
+```
+
+You can also run the `Release` workflow manually from the GitHub Actions tab and provide a tag such as `v0.1.0`.
+
+The workflow builds and uploads release archives for:
+
+| Platform | Rust target | Archive |
+| --- | --- | --- |
+| Windows x64 | `x86_64-pc-windows-msvc` | `.zip` |
+| Windows x86 | `i686-pc-windows-msvc` | `.zip` |
+| macOS Apple Silicon | `aarch64-apple-darwin` | `.tar.gz` |
+| macOS Intel | `x86_64-apple-darwin` | `.tar.gz` |
+| Linux x64 | `x86_64-unknown-linux-gnu` | `.tar.gz` |
+| Linux ARM64 | `aarch64-unknown-linux-gnu` | `.tar.gz` |
+
+Each archive includes the compiled `minecraft_connector_api` binary and this README.
+
 ## Development
 
 ### Build
