@@ -5,13 +5,8 @@ use std::error::Error as StdError;
 use std::fmt;
 use std::net::TcpStream;
 
-mod address;
-mod buffer;
-mod messages;
-mod server_status;
-
-use address::Address;
-use messages::send_message;
+use minecraft_connector_api::address::Address;
+use minecraft_connector_api::messages::send_message;
 
 #[derive(Debug)]
 struct ServiceError(Box<dyn StdError + Send + Sync>);

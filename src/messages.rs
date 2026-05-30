@@ -47,7 +47,7 @@ pub async fn send_message_async(
     Ok(buf)
 }
 
-fn make_handshake_message(url: &str, port: u16) -> (Vec<u8>, Vec<u8>) {
+pub fn make_handshake_message(url: &str, port: u16) -> (Vec<u8>, Vec<u8>) {
     let mut buffer = Buffer::new();
 
     // Handshaking https://wiki.vg/Protocol#Handshake
@@ -76,7 +76,7 @@ fn make_handshake_message(url: &str, port: u16) -> (Vec<u8>, Vec<u8>) {
     (len.0, buffer.0)
 }
 
-fn req_message() -> (Vec<u8>, Vec<u8>) {
+pub fn req_message() -> (Vec<u8>, Vec<u8>) {
     let mut buffer = Buffer::new();
     buffer.write_var_int(0x00);
 
@@ -84,43 +84,4 @@ fn req_message() -> (Vec<u8>, Vec<u8>) {
     len.write_var_int(buffer.0.len());
 
     (len.0, buffer.0)
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn builds_status_request_packet() {
-        let (len, message) = req_message();
-
-        assert_eq!(len, vec![0x01]);
-        assert_eq!(message, vec![0x00]);
-    }
-
-    #[test]
-    fn builds_handshake_packet_for_default_port() {
-        let (len, message) = make_handshake_message("localhost", 25565);
-
-        assert_eq!(len, vec![0x10]);
-        assert_eq!(
-            message,
-            vec![
-                0x00, // packet id: handshake
-                0xff, 0x01, // protocol version: 255
-                0x09, // host length
-                b'l', b'o', b'c', b'a', b'l', b'h', b'o', b's', b't', 0x63, 0xdd,
-                // port: 25565
-                0x01, // next state: status
-            ]
-        );
-    }
-
-    #[test]
-    fn handshake_length_changes_with_hostname_length() {
-        let (len, message) = make_handshake_message("mc", 25565);
-
-        assert_eq!(len, vec![0x09]);
-        assert_eq!(message.len(), 9);
-    }
 }
