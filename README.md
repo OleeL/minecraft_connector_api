@@ -16,6 +16,8 @@ The service exposes a single `/status` endpoint. Given a Minecraft server hostna
 ## Project structure
 
 ```text
+GitVersion.yml       # GitVersion configuration for stable and alpha release tags
+
 src/
 ├── address.rs        # Address model containing server URL and port
 ├── buffer.rs         # Helpers for writing Minecraft protocol data types
@@ -99,18 +101,16 @@ The response is the Minecraft server's status JSON payload as a raw string. A ty
 
 ## Releases
 
-GitHub Actions release automation is configured in `.github/workflows/release.yml`.
+GitHub Actions release automation is configured in `.github/workflows/release.yml`, with semantic versions calculated by [GitVersion](https://gitversion.net/docs/) using `GitVersion.yml`.
 
-A release is created automatically when you push a version tag that starts with `v`, for example:
+A release workflow runs automatically on every branch push:
 
-```sh
-git tag v0.1.0
-git push origin v0.1.0
-```
+- Pushes to `main` create a stable GitVersion tag and publish a full GitHub Release for that exact commit, for example `v0.1.1+5`.
+- Pushes to other branches create alpha GitVersion tags only, for example `v0.1.1-alpha.3`. Alpha tags do not publish full GitHub Releases or release assets.
 
-You can also run the `Release` workflow manually from the GitHub Actions tab and provide a tag such as `v0.1.0`.
+The workflow can also be started manually from the GitHub Actions tab.
 
-The workflow builds and uploads release archives for:
+For `main` releases, the workflow builds and uploads release archives for:
 
 | Platform | Rust target | Archive |
 | --- | --- | --- |
