@@ -13,6 +13,13 @@ branches:
       of-merged-branch: true
       when-current-commit-tagged: true
 
+  pull-request:
+    label: alpha
+    increment: Inherit
+    mode: ContinuousDeployment
+    prevent-increment:
+      when-current-commit-tagged: false
+
   feature:
     regex: ^features?[/-](?<BranchName>.+)
     label: alpha
