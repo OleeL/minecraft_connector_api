@@ -3,11 +3,19 @@ name: Release
 on:
   push:
     branches:
-      - "**"
+      - main
+  pull_request:
+    branches:
+      - main
+    types:
+      - opened
+      - reopened
+      - synchronize
   workflow_dispatch:
 
 permissions:
   contents: write
+  pull-requests: read
 
 env:
   CARGO_TERM_COLOR: always
@@ -50,16 +58,24 @@ jobs:
         run: |
           set -euo pipefail
 
-          target_sha="$(git rev-parse HEAD)"
-          tag_name="v${{ steps.gitversion.outputs.fullSemVer }}"
-          release_name="${tag_name}"
-
-          if [[ -n "${{ steps.gitversion.outputs.preReleaseTag }}" ]]; then
+          if [[ "${GITHUB_EVENT_NAME}" == "pull_request" ]]; then
+            target_sha="${{ github.event.pull_request.head.sha }}"
+            tag_name="v${{ steps.gitversion.outputs.majorMinorPatch }}-alpha.${{ github.event.pull_request.number }}"
+            release_name="${tag_name}"
             prerelease="true"
             make_latest="false"
           else
-            prerelease="false"
-            make_latest="true"
+            target_sha="$(git rev-parse HEAD)"
+            tag_name="v${{ steps.gitversion.outputs.fullSemVer }}"
+            release_name="${tag_name}"
+
+            if [[ -n "${{ steps.gitversion.outputs.preReleaseTag }}" ]]; then
+              prerelease="true"
+              make_latest="false"
+            else
+              prerelease="false"
+              make_latest="true"
+            fi
           fi
 
           echo "tag_name=${tag_name}" >> "${GITHUB_OUTPUT}"
@@ -76,11 +92,15 @@ jobs:
           tag_name="${{ steps.version.outputs.tag_name }}"
           target_sha="${{ steps.version.outputs.target_sha }}"
 
-          if git ls-remote --exit-code --tags origin "refs/tags/${tag_name}" > /dev/null 2>&1; then
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          if [[ "${GITHUB_EVENT_NAME}" == "pull_request" ]]; then
+            git tag -fa "${tag_name}" "${target_sha}" -m "Alpha ${tag_name}"
+            git push --force origin "refs/tags/${tag_name}"
+          elif git ls-remote --exit-code --tags origin "refs/tags/${tag_name}" > /dev/null 2>&1; then
             echo "Tag ${tag_name} already exists; leaving it unchanged."
           else
-            git config user.name "github-actions[bot]"
-            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
             git tag -a "${tag_name}" "${target_sha}" -m "Release ${tag_name}"
             git push origin "refs/tags/${tag_name}"
           fi
